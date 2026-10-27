@@ -243,6 +243,10 @@ class UIRenderer:
         # 112x112 target size produces ~96px tall character (equivalent to 120px at 1600x900)
         self.mascot = Mascot(target_size=(112, 112), initial_state=MascotState.IDLE)
 
+        # Laser beam origin and pulse wave state
+        self._laser_waves: list[dict[str, float]] = []  # active shockwaves traversing laser beam
+        self._was_jumping: bool = False
+
     def _load_city_background(self) -> None:
         asset_path = os.path.join(os.path.dirname(__file__), "assets", "Neon Pixel Cyberpunk Cityscape.png")
         if os.path.exists(asset_path):
@@ -427,41 +431,138 @@ class UIRenderer:
         self._surface.blit(tile, (cx - half, py - half))
 
     # ------------------------------------------------------------------
-    # Danger Line & Hazard Strip
+    # ------------------------------------------------------------------
+    # Dynamic Laser Beam & Jump Shockwave System
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Dynamic Laser Beam & SHM Harmonic Wave System
     # ------------------------------------------------------------------
 
     def draw_danger_line(self, tick: int = 0) -> None:
-        """Full-width retro diagonal red-and-black hazard bar with warning text."""
-        h_bar = 22
-        y = self._danger_y - h_bar // 2
+        """
+        Dynamic pulsating laser beam in vibrant neon red originating from our
+        character mascot, extending across the danger threshold as a true
+        Simple Harmonic Motion (SHM) sine wave.
+        Features:
+          - Continuous SHM standing/travelling wave oscillation: y(x, t) = A * sin(kx - wt)
+          - Breathing beam length originating from character
+          - Travelling harmonic wavepacket ripples launched when character jumps
+        """
+        base_y = self._danger_y
 
-        # 1. Glowing hazard bar with diagonal red & black stripes
-        hazard_surf = pygame.Surface((self._w, h_bar))
-        hazard_surf.fill((160, 20, 20))
-        # Draw 45-degree black stripes
-        stripe_w = 20
-        offset = (tick * 1.5) % (stripe_w * 2)
-        for sx in range(int(-stripe_w * 2 + offset), self._w + stripe_w * 2, stripe_w * 2):
-            pts = [(sx, h_bar), (sx + stripe_w, h_bar), (sx + stripe_w * 2, 0), (sx + stripe_w, 0)]
-            pygame.draw.polygon(hazard_surf, (25, 5, 5), pts)
+        # Mascot origin position on stone platform
+        mascot_cx = int(self.mascot.x)
+        mascot_cy = self._h - 74
+        # Emitter tip at character's raised hand/head level
+        emitter_x = mascot_cx + (22 if not self.mascot.facing_left else -22)
+        emitter_y = mascot_cy - 48
 
-        # Bright neon red border top & bottom
-        pygame.draw.line(hazard_surf, (255, 50, 50), (0, 0), (self._w, 0), 2)
-        pygame.draw.line(hazard_surf, (255, 50, 50), (0, h_bar - 1), (self._w, h_bar - 1), 2)
+        # Check for character jumping event to trigger a propagating SHM harmonic wavepacket
+        is_jumping = (self.mascot.state == MascotState.JUMP)
+        if is_jumping and not self._was_jumping:
+            # Trigger a new high-energy SHM wavepacket travelling from mascot across to screen edge
+            self._laser_waves.append({
+                "center_x": float(emitter_x),
+                "speed": 850.0,         # px/s travelling wave speed
+                "amplitude": 16.0,       # peak SHM vertical displacement
+                "width": 140.0,          # spatial envelope width of the wave packet
+                "wavelength": 48.0,      # SHM spatial period
+                "phase": 0.0,
+                "alpha": 255.0,
+            })
+        self._was_jumping = is_jumping
 
-        self._surface.blit(hazard_surf, (0, y))
+        # 1. Pulsating dynamic beam length (SHM breathing expansion & contraction)
+        # Laser originates from character and breathes rhythmically in length
+        pulse_val = math.sin(tick * 0.08)
+        target_len = self._w - emitter_x + 50
+        laser_len = target_len - int((pulse_val * 0.5 + 0.5) * 90)
+        end_x = min(self._w, emitter_x + laser_len)
 
-        # 2. Glowing danger zone pill indicator in center
-        font = _get_pixel_font(11)
-        pulse = int(180 + 75 * math.sin(tick * 0.12))
-        lbl = font.render("!  DANGER ZONE  !", True, (255, pulse, pulse))
-        lw, lh = lbl.get_size()
-        pill = pygame.Surface((lw + 28, lh + 10), pygame.SRCALPHA)
-        pygame.draw.rect(pill, (20, 0, 0, 220), (0, 0, lw + 28, lh + 10), border_radius=6)
-        pygame.draw.rect(pill, (255, 40, 40), (0, 0, lw + 28, lh + 10), 2, border_radius=6)
-        pill.blit(lbl, (14, 5))
+        # Update active jump SHM wavepackets
+        dt_approx = 0.016
+        active_waves = []
+        for w in self._laser_waves:
+            w["center_x"] += w["speed"] * dt_approx
+            w["phase"] += dt_approx * 24.0
+            w["alpha"] = max(0.0, w["alpha"] - dt_approx * 135.0)
+            if w["center_x"] - w["width"] < self._w + 50 and w["alpha"] > 5:
+                active_waves.append(w)
+        self._laser_waves = active_waves
 
-        self._surface.blit(pill, (self._w // 2 - (lw + 28) // 2, y + h_bar + 4))
+        # 2. Build SHM Wave Profile across laser points
+        # Base continuous SHM oscillation: y = A0 * sin(2*pi*x / lambda0 - omega0 * t)
+        t_sec = tick * 0.04
+        step = 4  # sample every 4 pixels for high-frequency smooth curve
+
+        shm_pts_glow: list[tuple[int, int]] = []
+        shm_pts_core: list[tuple[int, int]] = []
+
+        local_h = 100
+        half_h = local_h // 2
+        glow_surf = pygame.Surface((self._w, local_h), pygame.SRCALPHA)
+
+        x_coords = list(range(emitter_x, end_x + step, step))
+        if not x_coords or x_coords[-1] != end_x:
+            x_coords.append(end_x)
+
+        for px in x_coords:
+            dist_from_emitter = px - emitter_x
+            # Taper amplitude at the very tip of character's hand for smooth origin
+            origin_taper = min(1.0, dist_from_emitter / 35.0)
+
+            # Continuous baseline SHM wave: A * sin(k*x - omega*t)
+            k_base = 0.018  # spatial frequency
+            omega_base = 3.5  # angular frequency
+            base_amp = (3.5 + 1.5 * math.sin(tick * 0.06)) * origin_taper
+            dy = base_amp * math.sin(k_base * px - omega_base * t_sec)
+
+            # Add travelling jump SHM wavepackets: Gaussian envelope * sin(k_w * x - phase)
+            for w in self._laser_waves:
+                dist = abs(px - w["center_x"])
+                if dist < w["width"]:
+                    # Gaussian window envelope for localized SHM wave packet
+                    envelope = math.exp(-((dist / (w["width"] * 0.45)) ** 2))
+                    k_w = (2.0 * math.pi) / w["wavelength"]
+                    wave_dy = w["amplitude"] * envelope * math.sin(k_w * px - w["phase"])
+                    dy += wave_dy * (w["alpha"] / 255.0)
+
+            sy = int(half_h + dy)
+            shm_pts_glow.append((px, sy))
+
+        laser_red = (255, 30, 45)
+        laser_glow = (255, 75, 95)
+        laser_core = (255, 235, 240)
+
+        # 3. Draw SHM Laser Curves with Multi-layer Glow
+        if len(shm_pts_glow) >= 2:
+            # Layer A: Soft outer SHM atmospheric aura (18px)
+            pygame.draw.lines(glow_surf, (*laser_red, 38), False, shm_pts_glow, 18)
+            # Layer B: Vibrant neon red halo (10px)
+            pygame.draw.lines(glow_surf, (*laser_glow, 100), False, shm_pts_glow, 10)
+            # Layer C: Intense red laser mid-beam (4px)
+            pygame.draw.lines(glow_surf, (*laser_red, 210), False, shm_pts_glow, 4)
+            # Layer D: Piercing white-hot SHM wave core (2px)
+            pygame.draw.lines(glow_surf, (*laser_core, 250), False, shm_pts_glow, 2)
+
+        self._surface.blit(glow_surf, (0, base_y - half_h))
+
+        # 4. Energy Feed Conduit from Character Mascot Emitter
+        conduit_surf = pygame.Surface((self._w, self._h), pygame.SRCALPHA)
+        beam_target_y = base_y + int(shm_pts_glow[0][1] - half_h) if shm_pts_glow else base_y
+
+        pygame.draw.line(conduit_surf, (*laser_red, 70), (emitter_x, emitter_y), (emitter_x, beam_target_y), 8)
+        pygame.draw.line(conduit_surf, (*laser_glow, 170), (emitter_x, emitter_y), (emitter_x, beam_target_y), 3)
+        pygame.draw.line(conduit_surf, (*laser_core, 235), (emitter_x, emitter_y), (emitter_x, beam_target_y), 1)
+
+        # Emitter plasma sphere at mascot's hand
+        emitter_pulse = int(8 + 4 * math.sin(tick * 0.25))
+        pygame.draw.circle(conduit_surf, (*laser_red, 75), (emitter_x, emitter_y), emitter_pulse + 6)
+        pygame.draw.circle(conduit_surf, (*laser_glow, 190), (emitter_x, emitter_y), emitter_pulse)
+        pygame.draw.circle(conduit_surf, (255, 255, 255, 250), (emitter_x, emitter_y), max(2, emitter_pulse - 4))
+        self._surface.blit(conduit_surf, (0, 0))
+
 
     # ------------------------------------------------------------------
     # HUD (Score, Hearts, Combo)
@@ -558,34 +659,46 @@ class UIRenderer:
             msg = "No Camera" if not frame.camera_ok else "Waiting..."
             self._draw_cam_placeholder(px, py, pw, ph, msg)
 
-        # Live Landmark Skeleton Overlay
+        # Live Landmark Skeleton Overlay (all detected hands)
         if frame.landmarks_2d and frame.camera_ok:
             self._draw_landmark_skeleton(frame.landmarks_2d, px, py)
 
-        # Under-preview status bar with colored indicator dot
-        bar_h = 24
+        # Under-preview dual-hand status bar
+        bar_h = 30
         bar_y = py + ph + 4
-        pygame.draw.rect(self._surface, (16, 12, 32), (px, bar_y, pw, bar_h), border_radius=5)
-        pygame.draw.rect(self._surface, (60, 40, 110), (px, bar_y, pw, bar_h), 1, border_radius=5)
+        pygame.draw.rect(self._surface, (16, 12, 32), (px, bar_y, pw, bar_h), border_radius=6)
+        pygame.draw.rect(self._surface, (70, 45, 125), (px, bar_y, pw, bar_h), 1, border_radius=6)
 
-        dot_col = S.NEON_GREEN if frame.camera_ok else S.DANGER_COLOR
-        pygame.draw.circle(self._surface, dot_col, (px + 12, bar_y + bar_h // 2), 4)
+        stat_font = _get_pixel_font(7)
 
-        stat_font = _get_pixel_font(8)
         if not frame.camera_ok:
-            stat_str = "CAMERA ERROR"
-            stat_col = S.DANGER_COLOR
-        elif frame.gesture:
-            label = S.GESTURE_LABELS.get(frame.gesture, frame.gesture).upper()
-            pct = int(frame.confidence * 100)
-            stat_str = f"{label} ({pct}%)"
-            stat_col = S.NEON_GREEN
+            dot_col = S.DANGER_COLOR
+            pygame.draw.circle(self._surface, dot_col, (px + 12, bar_y + bar_h // 2), 4)
+            txt = stat_font.render("CAMERA ERROR / DISCONNECTED", True, S.DANGER_COLOR)
+            self._surface.blit(txt, (px + 22, bar_y + bar_h // 2 - txt.get_height() // 2))
         else:
-            stat_str = "GESTURE: READY"
-            stat_col = (160, 160, 190)
+            # Left Hand Status (Cyan)
+            lh = frame.left_hand
+            lh_detected = lh.detected and lh.gesture is not None
+            lh_dot = S.NEON_GREEN if lh_detected else (90, 90, 110)
+            pygame.draw.circle(self._surface, lh_dot, (px + 10, bar_y + bar_h // 2), 3)
 
-        txt = stat_font.render(stat_str, True, stat_col)
-        self._surface.blit(txt, (px + 22, bar_y + bar_h // 2 - txt.get_height() // 2))
+            lh_label = S.GESTURE_LABELS.get(lh.gesture, lh.gesture)[:6].upper() if lh_detected else "NONE"
+            lh_txt = stat_font.render(f"L:{lh_label}", True, S.NEON_CYAN if lh_detected else (140, 140, 160))
+            self._surface.blit(lh_txt, (px + 17, bar_y + bar_h // 2 - lh_txt.get_height() // 2))
+
+            # Center divider line
+            pygame.draw.line(self._surface, (50, 35, 90), (px + pw // 2, bar_y + 4), (px + pw // 2, bar_y + bar_h - 4), 1)
+
+            # Right Hand Status (Pink)
+            rh = frame.right_hand
+            rh_detected = rh.detected and rh.gesture is not None
+            rh_dot = S.NEON_GREEN if rh_detected else (90, 90, 110)
+            pygame.draw.circle(self._surface, rh_dot, (px + pw // 2 + 10, bar_y + bar_h // 2), 3)
+
+            rh_label = S.GESTURE_LABELS.get(rh.gesture, rh.gesture)[:6].upper() if rh_detected else "NONE"
+            rh_txt = stat_font.render(f"R:{rh_label}", True, S.NEON_PINK if rh_detected else (140, 140, 160))
+            self._surface.blit(rh_txt, (px + pw // 2 + 17, bar_y + bar_h // 2 - rh_txt.get_height() // 2))
 
     def _draw_cam_placeholder(self, x: int, y: int, w: int, h: int, msg: str) -> None:
         pygame.draw.rect(self._surface, (18, 14, 38), (x, y, w, h))
@@ -779,17 +892,30 @@ class UIRenderer:
             b_msg = "⚠  CAMERA DISCONNECTED"
             b_col = S.DANGER_COLOR
             b_bg = (60, 10, 10)
-        elif frame.gesture:
-            label = S.GESTURE_LABELS.get(frame.gesture, frame.gesture).upper()
-            b_msg = f"✓  CAMERA READY!  ·  {label}"
-            b_col = S.NEON_GREEN
-            b_bg = (10, 50, 20)
         else:
-            b_msg = "📹  CAMERA READY!"
-            b_col = S.NEON_GREEN
-            b_bg = (10, 50, 20)
+            lh = frame.left_hand
+            rh = frame.right_hand
+            lh_active = lh.detected and lh.gesture is not None
+            rh_active = rh.detected and rh.gesture is not None
 
-        badge_font = _get_pixel_font(12)
+            if lh_active and rh_active:
+                b_msg = f"✓ DUAL HANDS DETECTED · L:{lh.gesture.upper()[:5]} | R:{rh.gesture.upper()[:5]}"
+                b_col = S.NEON_GREEN
+                b_bg = (10, 50, 20)
+            elif lh_active:
+                b_msg = f"✓ LEFT HAND DETECTED · {lh.gesture.upper()}"
+                b_col = S.NEON_CYAN
+                b_bg = (10, 30, 50)
+            elif rh_active:
+                b_msg = f"✓ RIGHT HAND DETECTED · {rh.gesture.upper()}"
+                b_col = S.NEON_PINK
+                b_bg = (50, 10, 30)
+            else:
+                b_msg = "📹  CAMERA READY — SHOW BOTH HANDS"
+                b_col = (180, 180, 220)
+                b_bg = (20, 16, 40)
+
+        badge_font = _get_pixel_font(11)
         badge_txt = badge_font.render(b_msg, True, b_col)
         bw = badge_txt.get_width() + 32
         bh = 32
@@ -833,7 +959,10 @@ class UIRenderer:
             color = S.GESTURE_COLORS[g]
             label = S.GESTURE_LABELS.get(g, g)
             emoji = S.GESTURE_EMOJIS.get(g, "")
-            is_active = (frame.gesture == g and frame.camera_ok)
+            # Check active state for both hands
+            left_active = (frame.left_hand.detected and frame.left_hand.gesture == g and frame.camera_ok)
+            right_active = (frame.right_hand.detected and frame.right_hand.gesture == g and frame.camera_ok)
+            is_active = left_active or right_active
 
             card_rect = pygame.Rect(x + 16, card_y, w - 32, card_h)
 
@@ -856,10 +985,17 @@ class UIRenderer:
             txt = font.render(label, True, lbl_col)
             self._surface.blit(txt, (x + 68, card_y + 14))
 
-            # Active checkmark
-            if is_active:
-                chk = font.render("ACTIVE", True, S.NEON_GREEN)
-                self._surface.blit(chk, (x + w - 32 - chk.get_width() - 10, card_y + 14))
+            # Active badges (shows which hand is matching)
+            bx_pos = x + w - 32
+            if left_active and right_active:
+                tag = font.render("L + R", True, S.NEON_YELLOW)
+                self._surface.blit(tag, (bx_pos - tag.get_width() - 10, card_y + 14))
+            elif left_active:
+                tag = font.render("LEFT HAND", True, S.NEON_CYAN)
+                self._surface.blit(tag, (bx_pos - tag.get_width() - 10, card_y + 14))
+            elif right_active:
+                tag = font.render("RIGHT HAND", True, S.NEON_PINK)
+                self._surface.blit(tag, (bx_pos - tag.get_width() - 10, card_y + 14))
 
             card_y += card_h + card_gap
 
@@ -887,10 +1023,25 @@ class UIRenderer:
         # Retro Screen Frame with "3. GAMEPLAY" badge
         self.draw_retro_frame("3. GAMEPLAY")
 
-        # Subtle vertical dashed lane divider lines
-        for lx in S.LANE_X:
-            for dy in range(60, self._danger_y - 20, 24):
-                pygame.draw.line(self._surface, (50, 35, 95), (lx, dy), (lx, dy + 12), 1)
+        # Dual-Zone center divider line (subtle neon gradient)
+        mid_x = self._w // 2
+        for dy in range(60, self._danger_y - 20, 24):
+            pygame.draw.line(self._surface, (60, 40, 110), (mid_x, dy), (mid_x, dy + 12), 2)
+
+        # Left Zone Guide & Header (CYAN)
+        left_font = _get_pixel_font(9)
+        left_h_txt = left_font.render("◄ LEFT HAND ZONE", True, S.NEON_CYAN)
+        self._surface.blit(left_h_txt, (S.LEFT_TARGET_X - left_h_txt.get_width() // 2, 64))
+
+        # Right Zone Guide & Header (PINK)
+        right_font = _get_pixel_font(9)
+        right_h_txt = right_font.render("RIGHT HAND ZONE ►", True, S.NEON_PINK)
+        self._surface.blit(right_h_txt, (S.RIGHT_TARGET_X - right_h_txt.get_width() // 2, 64))
+
+        # Subtle vertical dashed lane guidelines for left & right targets
+        for lx in [S.LEFT_TARGET_X, S.RIGHT_TARGET_X]:
+            for dy in range(86, self._danger_y - 20, 24):
+                pygame.draw.line(self._surface, (45, 30, 85), (lx, dy), (lx, dy + 12), 1)
 
         # Danger Zone hazard bar
         self.draw_danger_line(tick)
@@ -898,10 +1049,10 @@ class UIRenderer:
         # Mascot actively running/reacting along the bottom stone platform
         self._draw_mascot(int(self.mascot.x), self._h - 74)
 
-        # HUD Score & Hearts
+        # HUD Score (and Lives)
         self.draw_hud(score, lives, combo)
 
-        # Wave HUD: wave number pill + progress bar
+        # Wave HUD: wave number pill
         self.draw_wave_hud(wave_number, wave_progress, wave_obj, wave_destroyed, tick)
 
         # Webcam preview in top-right
@@ -1119,21 +1270,22 @@ class UIRenderer:
         self._surface.blit(title, (self._w // 2 - title.get_width() // 2, 45))
 
         lines = [
-            "Targets fall from the top of the screen in two vertical lanes.",
-            "Show the matching hand gesture to your webcam to destroy each target.",
+            "Targets fall in synchronized PAIRS: ONE LEFT TARGET and ONE RIGHT TARGET.",
+            "Use your LEFT HAND for the Left target, and your RIGHT HAND for the Right target!",
             "",
-            "• Hold the gesture steadily for ~0.4 seconds to fire.",
-            "• Chain successful clears to build high COMBO score multipliers!",
-            "• If a target crosses the DANGER ZONE, you lose 1 life (start with 3).",
-            "• Targets fall faster as your score climbs. Test your reflexes!",
+            "• Both hands must match within the 300 ms SYNC WINDOW to destroy the pair.",
+            "• Fast sync (<120 ms) awards a PERFECT-SYNC Score Bonus (+25 pts)!",
+            "• If one hand matches first, it stays READY — match the other hand before time expires.",
+            "• If either target crosses the DANGER ZONE, you lose 1 life (start with 3).",
+            "• Chain successful pairs to build massive COMBO multipliers!",
             "",
             "CONTROLS:  Esc = Pause / Back    Alt+F4 = Quit Game",
         ]
-        line_font = _get_system_font(16, bold=False)
+        line_font = _get_system_font(15, bold=False)
         for i, line in enumerate(lines):
             col = (240, 240, 255) if line.startswith("•") else ((160, 160, 190) if not line.startswith("CONTROLS") else S.NEON_YELLOW)
             surf = line_font.render(line, True, col)
-            self._surface.blit(surf, (self._w // 2 - surf.get_width() // 2, 100 + i * 26))
+            self._surface.blit(surf, (self._w // 2 - surf.get_width() // 2, 95 + i * 25))
 
         # Gesture grid at bottom
         gx = self._w // 2 - (len(S.GESTURE_NAMES) * 110) // 2

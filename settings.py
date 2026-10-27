@@ -8,6 +8,7 @@ All tunable constants live here; no logic, no imports beyond stdlib typing.
 # ---------------------------------------------------------------------------
 WINDOW_W: int = 1280
 WINDOW_H: int = 720
+FULLSCREEN: bool = True
 FPS: int = 60
 WINDOW_TITLE: str = "HandSign Rush"
 
@@ -45,14 +46,28 @@ DANGER_Y_FRACTION: float = 0.87
 TARGET_SIZE: int = 90  # bounding box width/height in pixels
 
 # ---------------------------------------------------------------------------
+# Dual-Hand Gameplay Settings (HandSign Rush 2.0)
+# ---------------------------------------------------------------------------
+SYNC_WINDOW_SEC: float = 0.30       # Max time difference between left & right hand matches (300ms)
+PERFECT_SYNC_WINDOW_SEC: float = 0.12  # Bonus points if matched within 120ms
+PERFECT_SYNC_BONUS: int = 25        # Extra points for tight synchronization
+
+# Dual zone positions (X centers for left and right targets)
+LEFT_TARGET_X: int = 340
+RIGHT_TARGET_X: int = 940
+
+# Horizontal SHM Oscillation for falling targets
+TARGET_SHM_AMPLITUDE: float = 65.0   # Horizontal sway radius in pixels (A)
+TARGET_SHM_OMEGA: float = 2.4        # Angular frequency in rad/s (omega)
+
 # Gesture recognition
 # ---------------------------------------------------------------------------
-# Seconds a gesture must be held before it fires
-STABILITY_DURATION: float = 0.4
-# Seconds before the same gesture can fire again (prevents clearing multiple targets)
-GESTURE_COOLDOWN: float = 0.6
+# Seconds a gesture must be held before it is recognized as stable
+STABILITY_DURATION: float = 0.15     # Reduced from 0.4 for responsive dual-hand feel
+# Seconds cooldown after a pair cancellation before the next match can complete
+PAIR_COOLDOWN: float = 0.4
 # Minimum mediapipe confidence required
-CONFIDENCE_THRESHOLD: float = 0.75
+CONFIDENCE_THRESHOLD: float = 0.70
 # Landmark distance threshold for finger extension (normalised coords)
 FINGER_THRESHOLD: float = 0.035
 THUMB_THRESHOLD: float = 0.04

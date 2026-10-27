@@ -16,3 +16,7 @@ __pycache__/
 
 # Keep requirements file tracked
 !requirements.txt
+
+build/
+dist/
+HandSignRush.spec/

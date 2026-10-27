@@ -222,15 +222,30 @@ class FallingTarget:
         x: float,
         start_y: float,
         fall_speed: float,
+        hand_side: str = "LEFT",  # "LEFT" or "RIGHT"
+        shm_amplitude: float = S.TARGET_SHM_AMPLITUDE,
+        shm_omega: float = S.TARGET_SHM_OMEGA,
+        shm_phase: float = 0.0,
     ) -> None:
         self.gesture_name = gesture_name
         self.lane = lane
-        self.x = x
+        self.base_x = float(x)
+        self.x = float(x)
         self.y = start_y
         self.fall_speed = fall_speed
+        self.hand_side = hand_side.upper()
+
+        # Horizontal Simple Harmonic Motion (SHM) parameters: x(t) = base_x + A * sin(omega * t + phi)
+        self.shm_amplitude = shm_amplitude
+        self.shm_omega = shm_omega
+        self.shm_phase = shm_phase
+        self._elapsed_time: float = 0.0
 
         self.state = TargetState.FALLING
         self._anim_timer: float = 0.0
+
+        # Ready/Matched state for dual-hand sync window
+        self.is_matched: bool = False
 
         # Particles spawned on destroy
         self.particles: list[Particle] = []
@@ -251,7 +266,14 @@ class FallingTarget:
     def update(self, dt: float) -> None:
         if self.state == TargetState.FALLING:
             self.y += self.fall_speed * dt
+            self._elapsed_time += dt
             self._pulse += dt * 3.0
+
+            # Horizontal Simple Harmonic Motion: x(t) = base_x + A * sin(omega * t + phase)
+            # Damps slightly if target has already been matched
+            amp = self.shm_amplitude * 0.4 if self.is_matched else self.shm_amplitude
+            self.x = self.base_x + amp * math.sin(self.shm_omega * self._elapsed_time + self.shm_phase)
+
             # Check danger line
             if self.y + self._size // 2 >= self._danger_y:
                 self.miss()
@@ -318,7 +340,14 @@ class FallingTarget:
         # Danger proximity check (pulses red when close to danger line)
         dist_to_danger = self._danger_y - (self.y + half)
         in_danger = dist_to_danger < 85.0
-        draw_color = S.DANGER_COLOR if (in_danger and int(self._pulse * 4) % 2 == 0) else color
+        # Check if this side is in matched/ready state (awaiting other hand in sync window)
+        is_ready = self.is_matched
+        side_color = S.NEON_CYAN if self.hand_side == "LEFT" else S.NEON_PINK
+        accent_color = S.NEON_GREEN if is_ready else color
+        if in_danger and int(self._pulse * 4) % 2 == 0 and not is_ready:
+            draw_color = S.DANGER_COLOR
+        else:
+            draw_color = accent_color
 
         # 1. Upward speed streaks / light trails (retro arcade falling effect)
         streak_surf = pygame.Surface((self._size + 16, 60), pygame.SRCALPHA)
@@ -335,13 +364,13 @@ class FallingTarget:
                 pygame.draw.line(streak_surf, col, (sx, 60 - sy_step), (sx, 60 - sy_step), 2)
         surface.blit(streak_surf, (cx - (self._size + 16) // 2, cy - half - 58))
 
-        # 2. Outer rounded-square glowing aura
-        glow_pad = 8
+        # 2. Outer rounded-square glowing aura (intense green pulse if matched!)
+        glow_pad = 12 if is_ready else 8
         glow_rect = pygame.Rect(cx - half - glow_pad, cy - half - glow_pad, self._size + glow_pad * 2, self._size + glow_pad * 2)
         glow_surf = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
-        glow_a = int(35 + 20 * math.sin(self._pulse))
+        glow_a = int(80 + 40 * math.sin(self._pulse * 3)) if is_ready else int(35 + 20 * math.sin(self._pulse))
         pygame.draw.rect(glow_surf, (*draw_color, glow_a), glow_surf.get_rect(), border_radius=16)
-        pygame.draw.rect(glow_surf, (*draw_color, glow_a + 25), glow_surf.get_rect().inflate(-4, -4), border_radius=14)
+        pygame.draw.rect(glow_surf, (*draw_color, min(255, glow_a + 35)), glow_surf.get_rect().inflate(-4, -4), border_radius=14)
         surface.blit(glow_surf, glow_rect.topleft)
 
         # 3. Background tile (deep navy with pixel-styled rounded border)
@@ -350,11 +379,12 @@ class FallingTarget:
         # Deep translucent fill
         pygame.draw.rect(tile_surf, (16, 12, 34, 230), tile_surf.get_rect(), border_radius=12)
         # Inner subtle gradient / border
-        pygame.draw.rect(tile_surf, (*draw_color, 70), tile_surf.get_rect().inflate(-4, -4), border_radius=10)
+        pygame.draw.rect(tile_surf, (*draw_color, 80 if is_ready else 70), tile_surf.get_rect().inflate(-4, -4), border_radius=10)
         # Outer neon border (3px)
-        pygame.draw.rect(tile_surf, (*draw_color, 255), tile_surf.get_rect(), 3, border_radius=12)
+        border_w = 4 if is_ready else 3
+        pygame.draw.rect(tile_surf, (*draw_color, 255), tile_surf.get_rect(), border_w, border_radius=12)
         # Corner accent notches
-        c_acc = (255, 255, 255, 180)
+        c_acc = (255, 255, 255, 230 if is_ready else 180)
         pygame.draw.line(tile_surf, c_acc, (3, 6), (6, 3), 2)
         pygame.draw.line(tile_surf, c_acc, (self._size - 4, 6), (self._size - 7, 3), 2)
         surface.blit(tile_surf, tile_rect.topleft)
@@ -365,7 +395,26 @@ class FallingTarget:
 
         # 5. Label below icon
         label_surf = self._get_label()
-        surface.blit(label_surf, (cx - label_surf.get_width() // 2, cy + half - label_surf.get_height() - 3))
+        surface.blit(label_surf, (cx - label_surf.get_width() // 2, cy + half - label_surf.get_height() - 4))
+
+        # 6. Hand side badge top pill ("L HAND" or "R HAND" / "✓ READY")
+        badge_font = self._get_label_font()
+        if is_ready:
+            b_txt_str = "✓ READY"
+            b_bg_col = (10, 50, 20, 230)
+            b_bd_col = S.NEON_GREEN
+        else:
+            b_txt_str = f"{self.hand_side} HAND"
+            b_bg_col = (14, 10, 32, 230)
+            b_bd_col = side_color
+
+        b_surf_txt = badge_font.render(b_txt_str, True, b_bd_col)
+        bw, bh = b_surf_txt.get_width() + 14, b_surf_txt.get_height() + 6
+        b_pill = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        pygame.draw.rect(b_pill, b_bg_col, (0, 0, bw, bh), border_radius=6)
+        pygame.draw.rect(b_pill, b_bd_col, (0, 0, bw, bh), 1, border_radius=6)
+        b_pill.blit(b_surf_txt, (7, 3))
+        surface.blit(b_pill, (cx - bw // 2, cy - half - bh + 2))
 
     def _draw_destroy_anim(self, surface: pygame.Surface) -> None:
         progress = self._anim_timer / ANIM_DURATION  # 0 → 1

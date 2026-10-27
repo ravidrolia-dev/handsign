@@ -35,11 +35,27 @@ from settings import (
 # ---------------------------------------------------------------------------
 
 @dataclass
+class HandData:
+    """Tracking and gesture data for a single hand."""
+    detected: bool = False
+    gesture: str | None = None
+    confidence: float = 0.0
+    landmarks_2d: list[tuple[int, int]] | None = None  # pixel coords on preview (flipped)
+    raw_handedness: str = ""                           # MediaPipe raw label ("Left" or "Right")
+
+
+@dataclass
 class GestureFrame:
-    """Snapshot of gesture state at a point in time."""
+    """Snapshot of dual-hand gesture state at a point in time."""
+    # Dual-hand independent data
+    left_hand: HandData = field(default_factory=HandData)
+    right_hand: HandData = field(default_factory=HandData)
+
+    # Legacy/convenience single-hand fields (backwards compatibility)
     gesture: str | None = None
     confidence: float = 0.0
     landmarks_2d: list[tuple[int, int]] | None = None  # pixel coords on preview
+
     preview_frame: np.ndarray | None = None            # BGR, preview-sized
     timestamp: float = field(default_factory=time.monotonic)
     camera_ok: bool = False
@@ -61,17 +77,34 @@ class SharedGestureState:
             self._frame = frame
 
     def read(self) -> GestureFrame:
-        """Return a shallow copy of the current frame — non-blocking."""
+        """Return a copy of the current frame — non-blocking."""
         with self._lock:
-            # dataclass copy (shallow — np.ndarray not deep-copied, just ref)
+            f = self._frame
+            # Deep-copy hand data so threads don't race
+            lh = HandData(
+                detected=f.left_hand.detected,
+                gesture=f.left_hand.gesture,
+                confidence=f.left_hand.confidence,
+                landmarks_2d=list(f.left_hand.landmarks_2d) if f.left_hand.landmarks_2d else None,
+                raw_handedness=f.left_hand.raw_handedness,
+            )
+            rh = HandData(
+                detected=f.right_hand.detected,
+                gesture=f.right_hand.gesture,
+                confidence=f.right_hand.confidence,
+                landmarks_2d=list(f.right_hand.landmarks_2d) if f.right_hand.landmarks_2d else None,
+                raw_handedness=f.right_hand.raw_handedness,
+            )
             return GestureFrame(
-                gesture=self._frame.gesture,
-                confidence=self._frame.confidence,
-                landmarks_2d=self._frame.landmarks_2d,
-                preview_frame=self._frame.preview_frame,
-                timestamp=self._frame.timestamp,
-                camera_ok=self._frame.camera_ok,
-                error_msg=self._frame.error_msg,
+                left_hand=lh,
+                right_hand=rh,
+                gesture=f.gesture,
+                confidence=f.confidence,
+                landmarks_2d=list(f.landmarks_2d) if f.landmarks_2d else None,
+                preview_frame=f.preview_frame,
+                timestamp=f.timestamp,
+                camera_ok=f.camera_ok,
+                error_msg=f.error_msg,
             )
 
 
@@ -120,24 +153,39 @@ class _MockCaptureWorker:
                 self._gesture_timer = 0.0
                 self._gesture_idx = (self._gesture_idx + 1) % len(GESTURE_NAMES)
 
-            gesture = GESTURE_NAMES[self._gesture_idx]
+            g_left = GESTURE_NAMES[self._gesture_idx]
+            g_right = GESTURE_NAMES[(self._gesture_idx + 2) % len(GESTURE_NAMES)]
 
             # Build a simple placeholder preview frame
             preview = np.zeros((CAM_PREVIEW_H, CAM_PREVIEW_W, 3), dtype=np.uint8)
             preview[:] = (20, 20, 50)
             cv2.putText(
                 preview,
-                f"MOCK: {gesture}",
-                (10, CAM_PREVIEW_H // 2),
+                f"L:{g_left[:6]} R:{g_right[:6]}",
+                (8, CAM_PREVIEW_H // 2),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
+                0.38,
                 (0, 240, 255),
                 1,
                 cv2.LINE_AA,
             )
 
             frame = GestureFrame(
-                gesture=gesture,
+                left_hand=HandData(
+                    detected=True,
+                    gesture=g_left,
+                    confidence=0.95,
+                    landmarks_2d=None,
+                    raw_handedness="Left",
+                ),
+                right_hand=HandData(
+                    detected=True,
+                    gesture=g_right,
+                    confidence=0.95,
+                    landmarks_2d=None,
+                    raw_handedness="Right",
+                ),
+                gesture=g_left,
                 confidence=0.95,
                 landmarks_2d=None,
                 preview_frame=preview,
@@ -273,12 +321,12 @@ class HandTracker:
 
             self._camera_ok = True
 
-            # Initialise MediaPipe Hands
+            # Initialise MediaPipe Hands for up to 2 hands
             hands = mp_hands_module.Hands(
                 static_image_mode=False,
-                max_num_hands=1,
-                min_detection_confidence=0.4,
-                min_tracking_confidence=0.4,
+                max_num_hands=2,
+                min_detection_confidence=0.45,
+                min_tracking_confidence=0.45,
             )
 
             while self._running:
@@ -299,46 +347,85 @@ class HandTracker:
                     continue
 
                 # Process landmarks on the ORIGINAL (un-flipped) frame
-                # so that left/right handedness is correct.
+                # MediaPipe Hands raw classification:
+                # When camera faces player (selfie mode):
+                #   - Player's LEFT hand appears on camera right -> MediaPipe labels as "Right"
+                #   - Player's RIGHT hand appears on camera left -> MediaPipe labels as "Left"
+                # Therefore:
+                #   raw_handedness == "Right" -> Player's LEFT Hand
+                #   raw_handedness == "Left"  -> Player's RIGHT Hand
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                 results = hands.process(frame_rgb)
 
-                gesture: str | None = None
-                confidence: float = 0.0
-                landmarks_2d: list[tuple[int, int]] | None = None
+                left_hand_data = HandData()
+                right_hand_data = HandData()
+                all_landmarks_2d: list[tuple[int, int]] = []
+
+                h_orig, w_orig = frame_bgr.shape[:2]
+                pw, ph = CAM_PREVIEW_W, CAM_PREVIEW_H
+                sx = pw / w_orig
+                sy = ph / h_orig
 
                 if results.multi_hand_landmarks and results.multi_handedness:
-                    hand_lm = results.multi_hand_landmarks[0]
-                    hand_info = results.multi_handedness[0]
-                    handedness_label = hand_info.classification[0].label  # "Left" or "Right"
+                    for hand_lm, hand_info in zip(results.multi_hand_landmarks, results.multi_handedness):
+                        raw_label = hand_info.classification[0].label  # "Left" or "Right"
+                        # Geometric wrist position in camera coordinates (unflipped: x=0 is camera left, x=1 is camera right)
+                        wrist_x = hand_lm.landmark[0].x
 
-                    # Classify on raw landmarks
-                    gesture, confidence = self._classifier.classify(
-                        hand_lm.landmark, handedness_label
-                    )
+                        # Classify gesture on raw landmarks passing raw_label to GestureClassifier
+                        gesture, confidence = self._classifier.classify(
+                            hand_lm.landmark, raw_label
+                        )
 
-                    # Convert landmarks to pixel coords for the PREVIEW (flipped) image
-                    h_orig, w_orig = frame_bgr.shape[:2]
-                    # Preview dimensions after resize
-                    pw, ph = CAM_PREVIEW_W, CAM_PREVIEW_H
-                    sx = pw / w_orig
-                    sy = ph / h_orig
-                    landmarks_2d = []
-                    for lm in hand_lm.landmark:
-                        # Mirror x for the flipped preview
-                        px = int((1.0 - lm.x) * w_orig * sx)
-                        py = int(lm.y * h_orig * sy)
-                        landmarks_2d.append((px, py))
+                        # Convert landmarks to pixel coordinates for the mirrored preview (x mirrored)
+                        hand_landmarks_2d = []
+                        for lm in hand_lm.landmark:
+                            px = int((1.0 - lm.x) * w_orig * sx)
+                            py = int(lm.y * h_orig * sy)
+                            hand_landmarks_2d.append((px, py))
+                            all_landmarks_2d.append((px, py))
+
+                        # Map to user's perspective:
+                        # In selfie view, user's left hand has wrist_x > 0.5 (camera right) and raw_label == "Right"
+                        # User's right hand has wrist_x < 0.5 (camera left) and raw_label == "Left"
+                        # We combine raw_label with spatial position for robust disambiguation
+                        is_user_left = (raw_label == "Right")
+                        if len(results.multi_hand_landmarks) == 2:
+                            # When both hands are present, also cross-check spatial position
+                            # (wrist further right in camera = user's left hand)
+                            other_wrist_x = [
+                                h.landmark[0].x for h in results.multi_hand_landmarks if h != hand_lm
+                            ][0]
+                            is_user_left = wrist_x > other_wrist_x
+
+                        h_data = HandData(
+                            detected=True,
+                            gesture=gesture,
+                            confidence=confidence,
+                            landmarks_2d=hand_landmarks_2d,
+                            raw_handedness=raw_label,
+                        )
+
+                        if is_user_left:
+                            left_hand_data = h_data
+                        else:
+                            right_hand_data = h_data
 
                 # Flip for natural mirror preview AFTER landmark extraction
                 preview = cv2.flip(frame_bgr, 1)
                 preview = cv2.resize(preview, (CAM_PREVIEW_W, CAM_PREVIEW_H))
 
+                # Primary gesture for legacy components (prefers left hand then right hand)
+                primary_gesture = left_hand_data.gesture or right_hand_data.gesture
+                primary_confidence = left_hand_data.confidence if left_hand_data.gesture else right_hand_data.confidence
+
                 self._shared.write(
                     GestureFrame(
-                        gesture=gesture,
-                        confidence=confidence,
-                        landmarks_2d=landmarks_2d,
+                        left_hand=left_hand_data,
+                        right_hand=right_hand_data,
+                        gesture=primary_gesture,
+                        confidence=primary_confidence,
+                        landmarks_2d=all_landmarks_2d if all_landmarks_2d else None,
                         preview_frame=preview,
                         timestamp=time.monotonic(),
                         camera_ok=True,

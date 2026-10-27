@@ -66,7 +66,9 @@ class HandSignRushApp:
     def __init__(self) -> None:
         pygame.init()
         pygame.display.set_caption(S.WINDOW_TITLE)
-        self._screen = pygame.display.set_mode((S.WINDOW_W, S.WINDOW_H))
+        self._is_fullscreen: bool = S.FULLSCREEN
+        display_flags = (pygame.FULLSCREEN | pygame.SCALED) if self._is_fullscreen else 0
+        self._screen = pygame.display.set_mode((S.WINDOW_W, S.WINDOW_H), display_flags)
         self._clock = pygame.time.Clock()
 
         # Initialize audio system & start menu theme
@@ -145,11 +147,25 @@ class HandSignRushApp:
         for event in events:
             if event.type == pygame.QUIT:
                 self._state = AppState.QUIT
+            elif event.type == pygame.KEYDOWN:
+                # F11 or Alt+Enter to toggle fullscreen anytime
+                if event.key == pygame.K_F11 or (
+                    event.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and (event.mod & pygame.KMOD_ALT)
+                ):
+                    self._toggle_fullscreen()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Check quick mute button click
                 if self._mute_rect.collidepoint(event.pos):
                     audio_manager.toggle_mute()
                     audio_manager.play_sfx("button_click")
+
+    def _toggle_fullscreen(self) -> None:
+        """Toggles between windowed mode and fullscreen mode."""
+        self._is_fullscreen = not self._is_fullscreen
+        display_flags = (pygame.FULLSCREEN | pygame.SCALED) if self._is_fullscreen else 0
+        self._screen = pygame.display.set_mode((S.WINDOW_W, S.WINDOW_H), display_flags)
+        if hasattr(self, "_ui") and self._ui is not None:
+            self._ui.screen = self._screen
 
     # ------------------------------------------------------------------
     # Button hover SFX helper

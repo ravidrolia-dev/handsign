@@ -39,24 +39,23 @@ class WaveConfig:
     objective_count: int    # targets destroyed to complete this wave
 
 
-# Tuned for 1280×720.  Reference 1600×900 values × (720/900).
-# Wave 1 starts active and challenging right away.
+# Tuned for 1280×720 with faster, more exciting progression
 WAVE_TABLE: list[WaveConfig] = [
-    WaveConfig(1,  2, 184, 1.25, 10),
-    WaveConfig(2,  2, 216, 1.05, 12),
-    WaveConfig(3,  3, 248, 0.90, 14),
-    WaveConfig(4,  3, 280, 0.80, 16),
-    WaveConfig(5,  3, 312, 0.70, 18),
-    WaveConfig(6,  3, 328, 0.65, 20),
-    WaveConfig(7,  4, 340, 0.62, 22),
-    WaveConfig(8,  4, 348, 0.60, 24),
-    WaveConfig(9,  4, 352, 0.60, 26),
-    WaveConfig(10, 4, 356, 0.60, 28),
+    WaveConfig(1,  2, 235, 1.20, 10),
+    WaveConfig(2,  2, 275, 1.00, 12),
+    WaveConfig(3,  3, 315, 0.88, 14),
+    WaveConfig(4,  3, 355, 0.78, 16),
+    WaveConfig(5,  3, 390, 0.70, 18),
+    WaveConfig(6,  3, 415, 0.65, 20),
+    WaveConfig(7,  4, 435, 0.60, 22),
+    WaveConfig(8,  4, 450, 0.58, 24),
+    WaveConfig(9,  4, 465, 0.55, 26),
+    WaveConfig(10, 4, 480, 0.55, 28),
 ]
 
 # Hard caps — nothing ever exceeds these
-HARD_MAX_SPEED    = 380.0   # px/s
-HARD_MIN_INTERVAL = 0.55    # s
+HARD_MAX_SPEED    = 520.0   # px/s
+HARD_MIN_INTERVAL = 0.50    # s
 HARD_MAX_TARGETS  = 4
 
 # Toast notification duration (seconds). Pure cosmetic; never blocks gameplay.
