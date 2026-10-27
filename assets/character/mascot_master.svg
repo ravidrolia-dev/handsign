@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Shading Gradients -->
+    <linearGradient id="bodyShading" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="65%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#DDD6FE"/>
+    </linearGradient>
+
+    <linearGradient id="headbandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#DC2626"/>
+      <stop offset="50%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#B91C1C"/>
+    </linearGradient>
+
+    <linearGradient id="ribbonGrad1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#991B1B"/>
+    </linearGradient>
+
+    <linearGradient id="shoeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="80%" stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#991B1B"/>
+    </linearGradient>
+
+    <filter id="retroGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- MASTER MASCOT ROOT -->
+  <g id="mascot_master" filter="url(#retroGlow)">
+    
+    <!-- 1. FLUTTERING RIBBONS (Behind Head) -->
+    <g id="ribbons">
+      <!-- Upper Ribbon Tail -->
+      <path d="M 180,185 C 130,165 90,140 45,155 C 30,160 25,175 40,185 C 80,205 125,200 165,210 Z" 
+            fill="url(#ribbonGrad1)" stroke="#0F172A" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M 50,165 C 85,175 120,185 160,195" 
+            stroke="#FCA5A5" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+      <!-- Lower Ribbon Tail -->
+      <path d="M 175,210 C 120,225 80,250 35,240 C 20,235 20,215 35,210 C 75,195 120,205 160,200 Z" 
+            fill="url(#headbandGrad)" stroke="#0F172A" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M 45,230 C 85,225 125,215 155,205" 
+            stroke="#B91C1C" stroke-width="4" fill="none" stroke-linecap="round"/>
+            
+      <!-- Ribbon Knot -->
+      <ellipse cx="178" cy="202" rx="14" ry="18" fill="#DC2626" stroke="#0F172A" stroke-width="7"/>
+    </g>
+
+    <!-- 2. LEGS & SNEAKERS -->
+    <g id="legs">
+      <!-- Left Leg (Back) -->
+      <g id="leg_left">
+        <path d="M 210,380 L 195,435 L 215,440 L 230,385 Z" fill="#DDD6FE" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+        <!-- Left Sneaker -->
+        <!-- Sole -->
+        <path d="M 165,458 L 228,458 C 235,458 240,452 240,446 L 240,442 L 165,442 Z" fill="#FFFFFF" stroke="#0F172A" stroke-width="7"/>
+        <!-- Upper Shoe -->
+        <path d="M 175,442 C 175,430 190,422 205,422 L 225,424 C 232,424 238,432 238,442 Z" fill="url(#shoeGrad)" stroke="#0F172A" stroke-width="7"/>
+        <line x1="175" y1="450" x2="235" y2="450" stroke="#CBD5E1" stroke-width="3"/>
+      </g>
+
+      <!-- Right Leg (Front) -->
+      <g id="leg_right">
+        <path d="M 290,380 L 315,430 L 338,425 L 318,375 Z" fill="#F1F5F9" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+        <!-- Right Sneaker -->
+        <!-- Sole -->
+        <path d="M 290,455 L 365,455 C 372,455 378,448 378,440 L 378,436 L 290,436 Z" fill="#FFFFFF" stroke="#0F172A" stroke-width="7"/>
+        <!-- Upper Shoe -->
+        <path d="M 295,436 C 295,418 315,412 335,412 L 360,418 C 370,422 376,428 376,436 Z" fill="url(#shoeGrad)" stroke="#0F172A" stroke-width="7"/>
+        <line x1="295" y1="446" x2="370" y2="446" stroke="#CBD5E1" stroke-width="3"/>
+        <!-- Laces -->
+        <line x1="322" y1="422" x2="340" y2="422" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+        <line x1="325" y1="430" x2="345" y2="430" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- 3. MAIN BODY & FINGERS (Hand Silhouette) -->
+    <g id="body">
+      <!-- Hand palm + 4 fingers base -->
+      <path d="M 180,310 
+               C 170,250 175,180 200,140
+               C 215,115 235,110 245,135
+               C 255,100 275,95 285,120
+               C 295,90 320,85 330,115
+               C 340,95 365,100 370,135
+               C 385,180 390,260 375,330
+               C 365,385 330,405 280,405
+               C 220,405 190,375 180,310 Z" 
+            fill="url(#bodyShading)" stroke="#0F172A" stroke-width="10" stroke-linejoin="round"/>
+      
+      <!-- Lavender Shading Creases (Palm & Finger Creases) -->
+      <path d="M 245,135 C 248,160 250,180 250,200" stroke="#DDD6FE" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 285,120 C 288,150 290,175 290,195" stroke="#DDD6FE" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 330,115 C 332,145 332,170 330,190" stroke="#DDD6FE" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- Palm contour shadow -->
+      <path d="M 195,330 C 215,380 260,395 315,390 C 355,385 365,360 370,335 C 345,370 290,380 235,365 C 205,355 198,340 195,330 Z"
+            fill="#C4B5FD" opacity="0.7"/>
+    </g>
+
+    <!-- 4. HEADBAND (Red Karate Band with Gold Kanji / Emblem) -->
+    <g id="headband">
+      <!-- Main Band across forehead -->
+      <path d="M 175,190 C 220,182 320,180 380,195 L 382,230 C 320,215 220,218 174,228 Z" 
+            fill="url(#headbandGrad)" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+      <!-- Band highlight line -->
+      <path d="M 180,198 C 230,190 320,188 375,202" stroke="#FCA5A5" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <!-- Center Emblem / Sun circle -->
+      <circle cx="278" cy="206" r="14" fill="#FEF08A" stroke="#0F172A" stroke-width="4"/>
+      <path d="M 273,206 L 283,206 M 278,201 L 278,211" stroke="#EA580C" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <!-- 5. FACE (Eyes, Cheeks, Mouth) -->
+    <g id="face">
+      <!-- Left Eye -->
+      <g id="eye_left">
+        <ellipse cx="232" cy="265" rx="14" ry="20" fill="#0F172A"/>
+        <!-- Main Sparkle pupil -->
+        <circle cx="228" cy="256" r="6" fill="#FFFFFF"/>
+        <circle cx="236" cy="274" r="3" fill="#FFFFFF"/>
+      </g>
+
+      <!-- Right Eye -->
+      <g id="eye_right">
+        <ellipse cx="316" cy="265" rx="14" ry="20" fill="#0F172A"/>
+        <!-- Main Sparkle pupil -->
+        <circle cx="312" cy="256" r="6" fill="#FFFFFF"/>
+        <circle cx="320" cy="274" r="3" fill="#FFFFFF"/>
+      </g>
+
+      <!-- Blush Cheeks -->
+      <ellipse cx="208" cy="282" rx="12" ry="7" fill="#F472B6" opacity="0.6"/>
+      <ellipse cx="340" cy="282" rx="12" ry="7" fill="#F472B6" opacity="0.6"/>
+
+      <!-- Joyful Arcade Mouth -->
+      <path d="M 260,285 Q 275,310 290,285 Z" fill="#E11D48" stroke="#0F172A" stroke-width="5" stroke-linejoin="round"/>
+      <!-- Tongue Highlight -->
+      <path d="M 266,295 Q 275,306 284,295" stroke="#FDA4AF" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- 6. ARMS & HANDS (Front Action Poses) -->
+    <g id="arms">
+      <!-- Left Arm (Giving Thumbs-Up / Punch) -->
+      <g id="arm_left">
+        <path d="M 185,290 C 150,300 135,320 145,345 C 155,365 180,355 190,325 Z" 
+              fill="#F1F5F9" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+        <!-- Fist / Thumb -->
+        <ellipse cx="140" cy="335" rx="16" ry="16" fill="#FFFFFF" stroke="#0F172A" stroke-width="7"/>
+        <path d="M 132,320 C 132,305 142,300 148,310 L 146,325 Z" fill="#FFFFFF" stroke="#0F172A" stroke-width="6"/>
+      </g>
+
+      <!-- Right Arm (Victory Peace Sign / Cheering Fist) -->
+      <g id="arm_right">
+        <path d="M 370,290 C 405,295 425,315 415,340 C 405,360 380,350 365,320 Z" 
+              fill="#FFFFFF" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+        <!-- Hand -->
+        <ellipse cx="420" cy="330" rx="16" ry="16" fill="#FFFFFF" stroke="#0F172A" stroke-width="7"/>
+      </g>
+    </g>
+
+  </g>
+</svg>
